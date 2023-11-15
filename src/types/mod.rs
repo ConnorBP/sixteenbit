@@ -1,10 +1,10 @@
-use std::ops::{Index, IndexMut};
+use std::{ops::{Index, IndexMut}, fmt::Display};
 
 
 /// A super small 3bit color index
 /// Represents a color type we can pick from our selected palette
 #[repr(u8)]
-#[derive(Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub enum ColorIndex {
     #[default]
     Empty,
@@ -15,6 +15,12 @@ pub enum ColorIndex {
     PantsAccent2,
     EyesAccent3,
     Accent4,
+}
+
+impl Display for ColorIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 // collection of pallets (max 8)

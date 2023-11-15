@@ -3,6 +3,10 @@ Stores pixel art assets in super small domain-specific implementation of rle and
 
 ## Components
 
+### Image Editor
+
+see the [editor readme](./EDITOR.md)
+
 ### DNA 2Byte format
     (colorid) (features: (eyes)(alphamask)(colormask))(base_shapes: head, body)
     (3bits  ) (5bits:    (1bit)(2bit     )(2bit     ))(8bits:      (4bit)(4bit))

@@ -1,12 +1,14 @@
 use std::ops::{Index, IndexMut};
 
 use bevy::{prelude::*, window::PrimaryWindow, render::camera::{ScalingMode, Viewport}};
-use bevy_egui::{EguiPlugin, EguiContexts, egui};
+use bevy_egui::{EguiPlugin, EguiContexts, egui::{self, FontId, FontFamily}};
 use image::{init_picture_render, update_pixels};
 use sixteenbit_encoding::types::{ColorIndex, PaletteCollection};
 use utils::world_to_grid;
+use widgets::color_index;
 
 mod image;
+mod widgets;
 mod utils;
 
 #[derive(Default, Resource)]
@@ -44,6 +46,7 @@ pub struct PalettesData(PaletteCollection<u8>);
 
 #[derive(Resource, Default)]
 pub struct EditorSettings {
+    pub selected_color: ColorIndex,
     pub selected_palette: u8,
 }
 
@@ -63,12 +66,10 @@ impl Index<usize> for PixelData {
 impl IndexMut<usize> for PixelData {
 
     fn index_mut(&mut self, index: usize) -> &mut [ColorIndex] {
-        // &mut PixelRow(
-            self.0
-            .chunks_mut(EDITOR_SIZE)
-            .nth(index)
-            .expect("getting pixel row")
-        // )
+        self.0
+        .chunks_mut(EDITOR_SIZE)
+        .nth(index)
+        .expect("getting pixel row")
     }
 }
 
@@ -77,18 +78,27 @@ impl IndexMut<usize> for PixelData {
 struct MainCamera;
 
 fn main() {
-    sixteenbit_encoding::hello();
     App::new()
     .add_plugins((
         DefaultPlugins
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: "RLE Pixel Editor (Pending Cool Name)".into(),
+                    ..default()
+                }),
+                ..default()
+            })
             .set(ImagePlugin::default_nearest()),// set pixel art render mode,
         EguiPlugin,
     ))
     .init_resource::<OccupiedScreenSpace>()
     .init_resource::<CursorWorldCoords>()
     .init_resource::<PalettesData>()
-    .init_resource::<EditorSettings>()
-    .insert_resource(CursorType::Pencil(ColorIndex::Skin))
+    .insert_resource(EditorSettings {
+        selected_color: ColorIndex::Dark,
+        selected_palette: 0,
+    })
+    .insert_resource(CursorType::Pencil(ColorIndex::Dark))
     .insert_resource(PixelData(vec![ColorIndex::Empty; EDITOR_SIZE*EDITOR_SIZE]))
     .add_systems(Startup, 
         (
@@ -99,8 +109,9 @@ fn main() {
     )
     .add_systems(Update, (
         update_camera_transform_system,
-        ui_example_system,
+        ui_controls_system,
         cursor_system,
+        update_pen_color,
         input_system.after(cursor_system),
         update_pixels.after(input_system),
     ))
@@ -112,15 +123,19 @@ fn input_system(
     buttons: Res<Input<MouseButton>>,
     cursor: Res<CursorWorldCoords>,
     cursor_type: Res<CursorType>,
+    mut egui: EguiContexts,
 ) {
-    if buttons.just_pressed(MouseButton::Left) {
-        info!("clicked");
+    // don't handle input thats being sent to egui
+    let ctx = egui.ctx_mut();
+    if ctx.is_using_pointer() || ctx.is_pointer_over_area() {return;}
+
+    if buttons.pressed(MouseButton::Left) {
         match world_to_grid(cursor.0) {
             Some((x,y)) => {
                 match cursor_type.as_ref() {
                     CursorType::Pencil(p) => {
                         pixels[y][x] = *p;
-                        eprintln!("Placing pixel at: {}/{}", x, y);
+                        // eprintln!("Placing pixel at: {}/{}", x, y);
 
                     },
                     CursorType::Eraser => {
@@ -134,16 +149,33 @@ fn input_system(
     }
 }
 
-fn ui_example_system(
+fn update_pen_color(
+    editor_settings: Res<EditorSettings>,
+    mut cursor_type: ResMut<CursorType>,
+) {
+    if editor_settings.is_changed() {
+        match cursor_type.as_mut() {
+            CursorType::Pencil(c) => {
+                *c = editor_settings.selected_color;
+            },
+            _=>{},
+        }
+    }
+}
+
+fn ui_controls_system(
     mut contexts: EguiContexts,
     mut occupied_screen_space: ResMut<OccupiedScreenSpace>,
+    mut cursor_type: ResMut<CursorType>,
+    mut editor_settings: ResMut<EditorSettings>,
+    palette: Res<PalettesData>,
 ) {
     let ctx = contexts.ctx_mut();
 
     occupied_screen_space.left = egui::SidePanel::left("left_panel")
         .resizable(true)
         .show(ctx, |ui| {
-            ui.label("Left resizeable panel");
+            ui.label("Settings panel");
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
         })
         .response
@@ -152,16 +184,108 @@ fn ui_example_system(
     occupied_screen_space.right = egui::SidePanel::right("right_panel")
         .resizable(true)
         .show(ctx, |ui| {
-            ui.label("Right resizeable panel");
+            ui.label("Inspector panel");
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
         })
         .response
         .rect
         .width();
     occupied_screen_space.top = egui::TopBottomPanel::top("top_panel")
-        .resizable(true)
+        // .resizable(true)
         .show(ctx, |ui| {
-            ui.label("Top resizeable panel");
+            ui.label("Tools Panel");
+            
+            ui.horizontal(|ui| {
+                ui.menu_button("File", |ui| {
+                    if ui.button("Open").clicked() {
+    
+                    }
+                    if ui.button("Save").clicked() {
+    
+                    }
+                });
+
+                if let Some(button_style) = ui.style_mut().text_styles.get_mut(&egui::style::TextStyle::Button) {
+                    *button_style = FontId::new(24.0, FontFamily::Proportional);
+                }
+
+                ui.separator();
+                // pencil mode
+                if ui.button("✏").clicked() {
+                    *cursor_type = CursorType::Pencil(editor_settings.selected_color)
+                }
+                // eraser mode
+                if ui.button("🗑").clicked() {
+                    *cursor_type = CursorType::Eraser;
+                }
+                // disable input
+                if ui.button("❌").clicked() {
+                    *cursor_type = CursorType::None;
+                }
+                ui.separator();
+
+                let set = editor_settings.as_mut();
+
+                // color selector
+                color_index(
+                    ui,
+                    &mut set.selected_color,
+                    ColorIndex::Empty,
+                    "❌",
+                    &palette.0[set.selected_palette]
+                );
+                color_index(
+                    ui,
+                    &mut set.selected_color,
+                    ColorIndex::Dark,
+                    "🎩",
+                    &palette.0[set.selected_palette]
+                );
+                color_index(
+                    ui,
+                    &mut set.selected_color,
+                    ColorIndex::Bright,
+                    "🌞",
+                    &palette.0[set.selected_palette]
+                );
+                color_index(
+                    ui,
+                    &mut set.selected_color,
+                    ColorIndex::Skin,
+                    "👨",
+                    &palette.0[set.selected_palette]
+                );
+                color_index(
+                    ui,
+                    &mut set.selected_color,
+                    ColorIndex::ShirtAccent1,
+                    "👕",
+                    &palette.0[set.selected_palette]
+                );
+                color_index(
+                    ui,
+                    &mut set.selected_color,
+                    ColorIndex::PantsAccent2,
+                    "👖",
+                    &palette.0[set.selected_palette]
+                );
+                color_index(
+                    ui,
+                    &mut set.selected_color,
+                    ColorIndex::EyesAccent3,
+                    "👀",
+                    &palette.0[set.selected_palette]
+                );
+                color_index(
+                    ui,
+                    &mut set.selected_color,
+                    ColorIndex::Accent4,
+                    "🎨",
+                    &palette.0[set.selected_palette]
+                );
+            });
+
+            // this must be absolutely last
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
         })
         .response
@@ -170,7 +294,7 @@ fn ui_example_system(
     occupied_screen_space.bottom = egui::TopBottomPanel::bottom("bottom_panel")
         .resizable(true)
         .show(ctx, |ui| {
-            ui.label("Bottom resizeable panel");
+            ui.label("Info/Stats panel");
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
         })
         .response
@@ -187,7 +311,7 @@ fn setup_grid(
             transform: Transform::from_translation(Vec3::new(
                 0.,
                 i as f32 - EDITOR_SIZE as f32 / 2.,
-                0.,
+                1.,
             )),
             sprite: Sprite {
                 color: Color::rgb(0.27, 0.27, 0.27),
@@ -204,7 +328,7 @@ fn setup_grid(
             transform: Transform::from_translation(Vec3::new(
                 i as f32 - EDITOR_SIZE as f32 / 2.,
                 0.,
-                0.,
+                1.,
             )),
             sprite: Sprite {
                 color: Color::rgb(0.27, 0.27, 0.27),
@@ -306,17 +430,25 @@ fn update_camera_transform_system(
 
     let window = windows.single();
 
+    // return if window is not ready yet
+    if window.width() <= 0. || window.height() <= 0. {return;}
+
     let left_taken = occupied_screen_space.left;// window.width();
     let right_taken = occupied_screen_space.right;// / window.width();
     let top_taken = occupied_screen_space.top;// / window.height();
     let bottom_taken = occupied_screen_space.bottom;// / window.height();
 
+    let view_size =  UVec2::new(
+        (window.width() - (left_taken + right_taken)) as u32,
+        (window.height() - (top_taken + bottom_taken)) as u32
+    );
+
+    // don't set viewport to 0
+    if view_size.x == 0 || view_size.y == 0 {return;}
+
     camera.viewport = Some(Viewport {
         physical_position: UVec2::new(left_taken as u32,top_taken as u32),
-        physical_size: UVec2::new(
-            (window.width() - (left_taken + right_taken)) as u32,
-            (window.height() - (top_taken + bottom_taken)) as u32
-        ),
+        physical_size: view_size,
         ..default()
     });
 }
