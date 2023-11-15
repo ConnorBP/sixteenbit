@@ -6,10 +6,27 @@ edition = "2021"
 [lib]
 name = "sixteenbit_encoding"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "editor"
+
+# Enable a small amount of optimization in debug mode
+[profile.dev]
+opt-level = 1
+
+# Enable high optimizations for dependencies (incl. Bevy), but not for our code:
+[profile.dev.package."*"]
+opt-level = 3
 
 [dependencies]
 clap = "4.4"
 image = "0.24"
 serde = "1.0"
 bytemuck = "1.14"
+
+bevy = "0.12"
+bevy_egui = "0.23"
+
+[features]
+default = ["dynamic_linking"]
+dynamic_linking = ["bevy/dynamic_linking"]

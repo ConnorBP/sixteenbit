@@ -6,7 +6,7 @@ Stores pixel art assets in super small domain-specific implementation of rle and
 ### DNA 2Byte format
     (colorid) (features: (eyes)(alphamask)(colormask))(base_shapes: head, body)
     (3bits  ) (5bits:    (1bit)(2bit     )(2bit     ))(8bits:      (4bit)(4bit))
-- first 3 bits from left for color pallet id (8 possible options).
+- first 3 bits from left for color palette id (8 possible options).
 - next `1` bit for eye direction (left or right)
 <!-- - next `2` bits for alpha mask selection (4 variations: solid, hstripe, dots, or vstripe) -->
 - next `2` bits for color mask selection (4 variations: solid, hstripe, dots, or vstripe)
