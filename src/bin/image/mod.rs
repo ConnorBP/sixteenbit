@@ -2,7 +2,7 @@ use bevy::{prelude::*, render::render_resource::{TextureDimension, Extent3d, Tex
 use image::{ImageBuffer, Pixel, RgbaImage, Rgba};
 use sixteenbit_encoding::types::ColorIndex;
 
-use crate::{EDITOR_SIZE, PixelData, PalettesData, EditorSettings};
+use crate::{EDITOR_SIZE, TOTAL_PIXELS, PixelData, PalettesData, EditorSettings};
 
 // handles drawing of the canvas when we edit it
 
@@ -55,7 +55,7 @@ pub fn init_picture_render(
 
 /// Re-draws the canvas view when pixels change
 pub fn update_pixels(
-    new_pixels: Res<PixelData>,
+    new_pixels: Res<PixelData<TOTAL_PIXELS,EDITOR_SIZE>>,
     palette: Res<PalettesData>,
     settings: Res<EditorSettings>,
     mut buffer: ResMut<CanvasImage>,

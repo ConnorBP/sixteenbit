@@ -3,7 +3,7 @@ use std::ops::{Index, IndexMut};
 use bevy::{prelude::*, window::PrimaryWindow, render::camera::{ScalingMode, Viewport}};
 use bevy_egui::{EguiPlugin, EguiContexts, egui::{self, FontId, FontFamily}};
 use image::{init_picture_render, update_pixels};
-use sixteenbit_encoding::types::{ColorIndex, PaletteCollection};
+use sixteenbit_encoding::types::{ColorIndex, PaletteCollection, IndexedImage};
 use utils::world_to_grid;
 use widgets::color_index;
 
@@ -21,6 +21,7 @@ struct OccupiedScreenSpace {
 
 const CAMERA_TARGET: Vec3 = Vec3::ZERO;
 const EDITOR_SIZE: usize = 16;
+const TOTAL_PIXELS: usize = EDITOR_SIZE * EDITOR_SIZE;
 const GRID_WIDTH: f32 = 0.05;
 
 // #[derive(Resource, Deref, DerefMut)]
@@ -39,7 +40,7 @@ enum CursorType {
 }
 
 #[derive(Resource, Default)]
-pub struct PixelData(Vec<ColorIndex>);
+pub struct PixelData<const N: usize, const W: usize>(IndexedImage<N,W>);
 
 #[derive(Resource, Default)]
 pub struct PalettesData(PaletteCollection<u8>);
@@ -50,26 +51,17 @@ pub struct EditorSettings {
     pub selected_palette: u8,
 }
 
-impl Index<usize> for PixelData {
+impl<const N: usize, const W: usize> Index<usize> for PixelData<N,W> {
     type Output = [ColorIndex];
 
     fn index(&self, index: usize) -> &Self::Output {
-        &self.0
-        .chunks(EDITOR_SIZE)
-        .nth(index)
-        // .map(|r|PixelRow(r.to_vec()) )
-        .expect("getting pixel row")
-        // .to_vec()
-}
+        self.0.index(index)
+    }
 }
 
-impl IndexMut<usize> for PixelData {
-
+impl<const N: usize, const W: usize> IndexMut<usize> for PixelData<N,W> {
     fn index_mut(&mut self, index: usize) -> &mut [ColorIndex] {
-        self.0
-        .chunks_mut(EDITOR_SIZE)
-        .nth(index)
-        .expect("getting pixel row")
+        self.0.index_mut(index)
     }
 }
 
@@ -99,7 +91,7 @@ fn main() {
         selected_palette: 0,
     })
     .insert_resource(CursorType::Pencil(ColorIndex::Dark))
-    .insert_resource(PixelData(vec![ColorIndex::Empty; EDITOR_SIZE*EDITOR_SIZE]))
+    .insert_resource(PixelData(IndexedImage::<TOTAL_PIXELS,EDITOR_SIZE>::new::<EDITOR_SIZE>()))
     .add_systems(Startup, 
         (
             init_picture_render,
@@ -119,7 +111,7 @@ fn main() {
 }
 
 fn input_system(
-    mut pixels: ResMut<PixelData>,
+    mut pixels: ResMut<PixelData<TOTAL_PIXELS,EDITOR_SIZE>>,
     buttons: Res<Input<MouseButton>>,
     cursor: Res<CursorWorldCoords>,
     cursor_type: Res<CursorType>,

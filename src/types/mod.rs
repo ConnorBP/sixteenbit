@@ -1,25 +1,102 @@
-use std::{ops::{Index, IndexMut}, fmt::Display};
+use std::{ops::{Index, IndexMut}, fmt::Display, os::windows};
+use bytemuck::{Zeroable, Pod, Contiguous};
+use static_assertions::{const_assert_eq, const_assert};
 
 
 /// A super small 3bit color index
 /// Represents a color type we can pick from our selected palette
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
+// #[transparent(u8)]
 pub enum ColorIndex {
     #[default]
-    Empty,
-    Dark,
-    Bright,
-    Skin,
-    ShirtAccent1,
-    PantsAccent2,
-    EyesAccent3,
-    Accent4,
+    Empty = 0,
+    Dark = 1,
+    Bright = 2,
+    Skin = 3, // Might rename this to MidTone to be more generic
+    ShirtAccent1 = 4,
+    PantsAccent2 = 5,
+    EyesAccent3 = 6,
+    Accent4 = 7,
+}
+
+// we are treating the enum as a raw u8
+// so this just double checks that the compiler is in fact treating it as such
+static_assertions::assert_eq_size!(ColorIndex,u8);
+
+unsafe impl Zeroable for ColorIndex {
+    fn zeroed() -> Self {
+        unsafe { core::mem::zeroed() }
+    }
+}
+unsafe impl Pod for ColorIndex {}
+
+unsafe impl Contiguous for ColorIndex {
+    type Int = u8;
+    const MAX_VALUE: u8 = ColorIndex::Accent4 as u8;
+    const MIN_VALUE: u8 = ColorIndex::Empty as u8;
 }
 
 impl Display for ColorIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
+    }
+}
+
+/// Representation of the Non-Encoded pixel bytes that are in the intermediary indexed format already.
+#[derive(Copy, Clone, Zeroable)]
+// #[repr(C, packed)]
+pub struct IndexedImage<const N: usize, const W: usize> {
+    resolution: [u8;2],
+    pixels: [ColorIndex;N],
+}
+
+impl<const N: usize, const W: usize> Default for IndexedImage<N,W> {
+    fn default() -> Self {
+        Self {
+            resolution: Default::default(),
+            pixels: std::array::from_fn::<_,N,_>(|_| ColorIndex::Empty)
+        }
+    }
+}
+
+
+
+impl<const N: usize,const W: usize> IndexedImage<N,W> {
+    pub fn new<const H: usize>() -> Self {
+        // panic if the inputted pixel count is not the same as array size
+        // sadly static assertions are not working here
+        assert_eq!(W as usize * H as usize, N);
+        IndexedImage {
+            resolution: [W as u8,H as u8],
+            pixels: [ColorIndex::Empty;N],
+        }
+    }
+}
+
+impl<const N: usize, const W: usize> Index<usize> for IndexedImage<N,W> {
+    type Output = [ColorIndex];
+
+    fn index(&self, index: usize) -> &Self::Output {
+        // total pixel count (N) must always be divisible by WIDTH
+        debug_assert_eq!(N % W, 0);
+        &self.pixels
+        .chunks(W)
+        .nth(index)
+        // .map(|r|PixelRow(r.to_vec()) )
+        .expect("getting pixel row")
+        // .to_vec()
+    }
+}
+
+impl<const N: usize, const W: usize> IndexMut<usize> for IndexedImage<N,W> {
+    fn index_mut(&mut self, index: usize) -> &mut [ColorIndex] {
+        // total pixel count (N) must always be divisible by WIDTH
+        debug_assert_eq!(N % W, 0);
+        self.pixels
+        .chunks_mut(W)
+        .nth(index)
+        .expect("getting pixel row")
     }
 }
 

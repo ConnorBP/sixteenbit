@@ -3368,6 +3368,7 @@ dependencies = [
  "clap",
  "image",
  "serde",
+ "static_assertions",
 ]
 
 [[package]]
