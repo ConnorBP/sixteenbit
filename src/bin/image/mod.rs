@@ -1,5 +1,5 @@
-use bevy::{prelude::*, asset::AsyncReadExt, render::render_resource::{TextureDescriptor, TextureDimension, Extent3d, TextureFormat}, utils::petgraph::data};
-use image::{GenericImageView, RgbImage, ImageBuffer, Pixel, RgbaImage, Rgba};
+use bevy::{prelude::*, render::render_resource::{TextureDimension, Extent3d, TextureFormat}};
+use image::{ImageBuffer, Pixel, RgbaImage, Rgba};
 use sixteenbit_encoding::types::ColorIndex;
 
 use crate::{EDITOR_SIZE, PixelData, PalettesData, EditorSettings};

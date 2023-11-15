@@ -1,6 +1,6 @@
 use std::ops::{Index, IndexMut};
 
-use bevy::{prelude::*, window::PrimaryWindow, render::camera::ScalingMode, input::mouse::MouseButtonInput};
+use bevy::{prelude::*, window::PrimaryWindow, render::camera::{ScalingMode, Viewport}};
 use bevy_egui::{EguiPlugin, EguiContexts, egui};
 use image::{init_picture_render, update_pixels};
 use sixteenbit_encoding::types::{ColorIndex, PaletteCollection};
@@ -98,7 +98,7 @@ fn main() {
         )
     )
     .add_systems(Update, (
-        // update_camera_transform_system,
+        update_camera_transform_system,
         ui_example_system,
         cursor_system,
         input_system.after(cursor_system),
@@ -253,7 +253,7 @@ fn setup_system(
     commands.spawn((Camera2dBundle {
         transform: camera_transform,
         projection: OrthographicProjection {
-            scaling_mode: ScalingMode::AutoMin { min_width: 20., min_height: 20. },
+            scaling_mode: ScalingMode::AutoMin { min_width: EDITOR_SIZE as f32, min_height: EDITOR_SIZE as f32 },
             ..Default::default()
         },
         ..Default::default()
@@ -276,10 +276,17 @@ fn cursor_system(
     // There is only one primary window, so we can similarly get it from the query:
     let window = q_window.single();
 
+    let viewport_offset = if let Some(viewport) = &camera.viewport {
+        let pos = viewport.physical_position;
+        Vec2::new(pos.x as f32, pos.y as f32)
+    } else {
+        Vec2::ZERO
+    };
+
     // check if the cursor is inside the window and get its position
     // then, ask bevy to convert into world coordinates, and truncate to discard Z
     if let Some(world_position) = window.cursor_position()
-        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor-viewport_offset))
         .map(|ray| ray.origin.truncate())
     {
         mycoords.0 = world_position;
@@ -287,31 +294,29 @@ fn cursor_system(
     }
 }
 
-// fn update_camera_transform_system(
-//     occupied_screen_space: Res<OccupiedScreenSpace>,
-//     // original_camera_transform: Res<OriginalCameraTransform>,
-//     windows: Query<&Window, With<PrimaryWindow>>,
-//     mut camera_query: Query<(&Projection, &mut Transform)>,
-// ) {
-//     // let (camera_projection, mut transform) = match camera_query.get_single_mut() {
-//     //     Ok((Projection::Perspective(projection), transform)) => (projection, transform),
-//     //     _ => unreachable!(),
-//     // };
+fn update_camera_transform_system(
+    occupied_screen_space: Res<OccupiedScreenSpace>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut camera_query: Query<&mut Camera, With<MainCamera>>,
+) {
+    let mut camera = match camera_query.get_single_mut() {
+        Ok(camera) => camera,
+        _ => unreachable!(),
+    };
 
-//     // let distance_to_target = (CAMERA_TARGET - original_camera_transform.translation).length();
-//     // let frustum_height = 2.0 * distance_to_target * (camera_projection.fov * 0.5).tan();
-//     // let frustum_width = frustum_height * camera_projection.aspect_ratio;
+    let window = windows.single();
 
-//     // let window = windows.single();
+    let left_taken = occupied_screen_space.left;// window.width();
+    let right_taken = occupied_screen_space.right;// / window.width();
+    let top_taken = occupied_screen_space.top;// / window.height();
+    let bottom_taken = occupied_screen_space.bottom;// / window.height();
 
-//     // let left_taken = occupied_screen_space.left / window.width();
-//     // let right_taken = occupied_screen_space.right / window.width();
-//     // let top_taken = occupied_screen_space.top / window.height();
-//     // let bottom_taken = occupied_screen_space.bottom / window.height();
-//     // transform.translation = original_camera_transform.translation
-//     //     + transform.rotation.mul_vec3(Vec3::new(
-//     //         (right_taken - left_taken) * frustum_width * 0.5,
-//     //         (top_taken - bottom_taken) * frustum_height * 0.5,
-//     //         0.0,
-//     //     ));
-// }
+    camera.viewport = Some(Viewport {
+        physical_position: UVec2::new(left_taken as u32,top_taken as u32),
+        physical_size: UVec2::new(
+            (window.width() - (left_taken + right_taken)) as u32,
+            (window.height() - (top_taken + bottom_taken)) as u32
+        ),
+        ..default()
+    });
+}

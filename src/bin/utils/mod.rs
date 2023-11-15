@@ -5,6 +5,7 @@ use crate::EDITOR_SIZE;
 
 
 // takes in a grid position from 0 to editor_size and outputs a world coordinate
+#[allow(unused)]
 pub fn grid_to_world(grid_pos: (u32,u32)) -> Vec2 {
     Vec2::new(
         (grid_pos.0 as f32 - EDITOR_SIZE as f32 / 2.)+0.5,
