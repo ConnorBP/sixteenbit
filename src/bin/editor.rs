@@ -1,8 +1,8 @@
 use std::ops::{Index, IndexMut};
 
 use bevy::{prelude::*, window::PrimaryWindow, render::camera::{ScalingMode, Viewport}};
-use bevy_egui::{EguiPlugin, EguiContexts, egui::{self, FontId, FontFamily}};
-use image::{init_picture_render, update_pixels, encoder::{EncoderPlugin, RLEncodedString, RLEncodedBytes}};
+use bevy_egui::{EguiPlugin, EguiContexts, egui::{self, FontId, FontFamily, Slider, TextEdit}};
+use image::{init_picture_render, update_pixels, encoder::{EncoderPlugin, RLEncodedString, RLEncodedBytes, RLEncoderSettings}};
 use sixteenbit_encoding::types::{ColorIndex, PaletteCollection, IndexedImage};
 use utils::world_to_grid;
 use widgets::{color_index, tool_selector};
@@ -34,8 +34,9 @@ struct CursorWorldCoords(Vec2);
 #[derive(Resource, Default, PartialEq)]
 pub enum CursorType {
     #[default]
-    None,
+    Move,
     Pencil(ColorIndex),
+    FillBucket(ColorIndex),
     Eraser,
 }
 
@@ -164,9 +165,10 @@ fn ui_controls_system(
     mut occupied_screen_space: ResMut<OccupiedScreenSpace>,
     mut cursor_type: ResMut<CursorType>,
     mut editor_settings: ResMut<EditorSettings>,
-    palette: Res<PalettesData>,
+    mut rle_encoder_settings: ResMut<RLEncoderSettings>,
     rle_encoded_string: Res<RLEncodedString>,
     rle_encoded_bytes: Res<RLEncodedBytes>,
+    palette: Res<PalettesData>,
 ) {
     let ctx = contexts.ctx_mut();
 
@@ -285,21 +287,34 @@ fn ui_controls_system(
     occupied_screen_space.bottom = egui::TopBottomPanel::bottom("bottom_panel")
         .resizable(true)
         .show(ctx, |ui| {
-            ui.label("Info/Stats panel");
-            if rle_encoded_bytes.0.len() > 0 {
-                let header_bits = format!("Header Bits: {:#b}", rle_encoded_bytes.0[0]);
-                ui.label(header_bits);
+            ui.heading("RLE Encoder");
+            let vt = ui.label("Vertical Trim").id;
+            if ui.add(Slider::new(
+                &mut rle_encoder_settings.bypass_change_detection().vertical_trim,
+                0..=(EDITOR_SIZE as u8 -1)
+            )).labelled_by(vt).changed() {
+                rle_encoder_settings.set_changed();
             }
             ui.horizontal(|ui| {
+                ui.label(format!("Hex Encoded ({} Bytes): ", rle_encoded_bytes.0.bytes.len()));
                 if ui.button("📋").on_hover_text("Click to copy").clicked() {
                     ui.output_mut(|out| {
                         out.copied_text = rle_encoded_string.0.clone()
                     });
                 }
-                ui.heading(&rle_encoded_string.0);
+                ui.add(TextEdit::singleline(&mut rle_encoded_string.0.as_str()).desired_width(f32::INFINITY))
             });
-            
 
+            if rle_encoded_bytes.0.bytes.len() > 0 {
+                let header_bits = format!(
+                    "Header bits: {:#b} encoded_width: {} left_offset: {}",
+                    rle_encoded_bytes.0.bytes[0],
+                    rle_encoded_bytes.0.header_width,
+                    rle_encoded_bytes.0.header_offset
+                );
+                ui.label(header_bits);
+            }
+            
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
         })
         .response

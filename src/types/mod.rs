@@ -48,6 +48,7 @@ impl Display for ColorIndex {
 #[derive(Clone, Zeroable)]
 // #[repr(C, packed)]
 pub struct IndexedImage<const N: usize, const W: usize> {
+    pub vertical_trim: u8,
     resolution: [u8;2],
     pixels: [ColorIndex;N],
 }
@@ -55,7 +56,8 @@ pub struct IndexedImage<const N: usize, const W: usize> {
 impl<const N: usize, const W: usize> Default for IndexedImage<N,W> {
     fn default() -> Self {
         Self {
-            resolution: Default::default(),
+            vertical_trim: 0,
+            resolution: [W as u8,(N/W) as u8],
             pixels: std::array::from_fn::<_,N,_>(|_| ColorIndex::Empty)
         }
     }
@@ -67,8 +69,9 @@ impl<const N: usize,const W: usize> IndexedImage<N,W> {
         // sadly static assertions are not working here
         assert_eq!(W as usize * H as usize, N);
         IndexedImage {
+            vertical_trim: 0,
             resolution: [W as u8,H as u8],
-            pixels: [ColorIndex::Empty;N],
+            pixels: std::array::from_fn::<_,N,_>(|_| ColorIndex::Empty),
         }
     }
     pub fn enumerate_pixels(&self) -> EnumerateIndexedImage<N,W> {

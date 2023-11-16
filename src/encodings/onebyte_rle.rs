@@ -8,9 +8,11 @@ const OFFSET_LIMIT: u8 = 0x1 << 3;
 
 
 /// Structure representing an image encoded with my Domain Specific 1Byte-per-run Color RLE encoding
-#[derive(Clone)]
+#[derive(Default, Clone)]
 pub struct OneByteRle {
-    bytes: Vec<u8>,
+    pub header_offset: u8,
+    pub header_width: u8,
+    pub bytes: Vec<u8>,
 }
 
 pub trait Rle {
@@ -21,6 +23,8 @@ pub trait Rle {
 impl OneByteRle {
     pub fn new() -> Self {
         Self {
+            header_offset: 0,
+            header_width: 0,
             bytes: vec![],
         }
     }
@@ -36,6 +40,8 @@ impl OneByteRle {
     pub fn push_header(&mut self, offset: u8, encode_width: u8) {
         // assert that the header is the first byte being entered
         debug_assert_eq!(self.bytes.len(), 0);
+        self.header_offset = offset;
+        self.header_width = encode_width;
         // create header byte
         let header_byte: u8 = (offset as u8) << 5 | (encode_width & 0x1F);
         // push the header to the first byte of our array
@@ -135,9 +141,12 @@ pub fn indexed_to_rle<const PIXELS: usize, const WIDTH: usize>(image: &IndexedIm
 
     info!("actual width: {} encoded_width: {}",encode_width + 1,encode_width);
 
+    // minimum y to start reading from.
+    // values above this are discarded and the image is treated as if it starts from that line
+    let min_y = image.vertical_trim;
+
     // run lengths acumulator
     let mut runs = vec![];
-
     // the pixel type of the previous cell
     // let mut last_pixel = None;
     for (x,y,p) in image.enumerate_pixels() {
@@ -146,6 +155,9 @@ pub fn indexed_to_rle<const PIXELS: usize, const WIDTH: usize>(image: &IndexedIm
         if x < offset { continue; }
         // skip pixels after encode_width + offset
         if x > encode_width + offset { continue; }
+
+        // skip the vertical trimmed values
+        if y < min_y { continue; }
 
         // for first pixel, simply input it into the acu
         if runs.len() == 0 {

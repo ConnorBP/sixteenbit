@@ -47,17 +47,27 @@ body data will be stored as [rle encoded pixels](#single-byte-rle-encoding)
 # Encodings
 
 ## Single byte rle encoding
-- One byte per run. 1 bit decides if the pixel is on or off, and the other 7 bits determine the length of the run. (max 128 run since we will never do a run of 0)
-- run length value gets 1 added to it so we don't have 0 length runs
-- width also gets 1 added cause 0 size is invalid
-- runs can continue on the next line
-- width is defined in the first bytes least significant 5 bits (0b000**1_1111**). maximum 32
-- the other 3 bytes will be left offset
-- runs start from top left of image
-- discard rle byte for last row of empty pixels during encode
-- then during decode, infer last rows empty cells until image row reaches width
 
-Note: `if we limit max width to 16 or to multiples of 8 (8*16) then we can use 4 bytes to decide object color or other attributes.`
+### Header Byte
+
+- width is defined in the first bytes least significant 5 bits (0b000**1_1111**). maximum 32
+- width gets 1 added on decode cause 0 size is invalid
+- the other 3 bytes will be left offset. Possible offsets: (0 to 7)
+maybe we should do a top offset + height byte too?
+
+ Alternative header:
+ If our assets dimensions can be assumed on decode (ex 32x32) then the header can be:
+`4 bits left offset` + `4 bits top offset`
+
+### Run Length Bytes
+
+for 1bit color: One byte per run. 1 bit decides if the pixel is on or off, and the other 7 bits determine the length of the run. (max 128 run since we will never do a run of 0)
+
+- run length value gets 1 added to it on decode so we don't have 0 length runs
+- runs can continue on the next line (wrapping)
+- first run starts from top left of image + offset value
+- discard rle byte for last row of empty pixels during end step of  encode
+- then during decode, infer last rows empty cells until image row reaches width or simply stop drawing pixels
 
 a 4x4 image, with two empty top rows and two filled botom rows, would look like the following:
 

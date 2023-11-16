@@ -50,35 +50,22 @@ pub fn tool_selector(
     selected_tool: &mut CursorType,
     selected_color: & ColorIndex,
 ) {
-    
-    // // pencil mode
-    // if ui.button("✏").clicked() {
-    //     *selected_tool = CursorType::Pencil(editor_settings.selected_color)
-    // }
     selector_button(
         ui,
         selected_tool,
         CursorType::Pencil(*selected_color),
         "✏ Pencil"
     );
-    // // eraser mode
-    // if ui.button("🗑").clicked() {
-    //     *selected_tool = CursorType::Eraser;
-    // }
     selector_button(
         ui,
         selected_tool,
         CursorType::Eraser,
         "🗑 Eraser"
     );
-    // // disable input
-    // if ui.button("❌").clicked() {
-    //     *selected_tool = CursorType::None;
-    // }
     selector_button(
         ui,
         selected_tool,
-        CursorType::None,
-        "❌ None"
+        CursorType::Move,
+        "🤚 Move"
     );
 }
