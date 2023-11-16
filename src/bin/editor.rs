@@ -2,10 +2,10 @@ use std::ops::{Index, IndexMut};
 
 use bevy::{prelude::*, window::PrimaryWindow, render::camera::{ScalingMode, Viewport}};
 use bevy_egui::{EguiPlugin, EguiContexts, egui::{self, FontId, FontFamily}};
-use image::{init_picture_render, update_pixels};
+use image::{init_picture_render, update_pixels, encoder::{EncoderPlugin, RLEncodedString, RLEncodedBytes}};
 use sixteenbit_encoding::types::{ColorIndex, PaletteCollection, IndexedImage};
 use utils::world_to_grid;
-use widgets::color_index;
+use widgets::{color_index, tool_selector};
 
 mod image;
 mod widgets;
@@ -31,8 +31,8 @@ const GRID_WIDTH: f32 = 0.05;
 #[derive(Resource, Default)]
 struct CursorWorldCoords(Vec2);
 
-#[derive(Resource, Default)]
-enum CursorType {
+#[derive(Resource, Default, PartialEq)]
+pub enum CursorType {
     #[default]
     None,
     Pencil(ColorIndex),
@@ -51,16 +51,16 @@ pub struct EditorSettings {
     pub selected_palette: u8,
 }
 
-impl<const N: usize, const W: usize> Index<usize> for PixelData<N,W> {
-    type Output = [ColorIndex];
+impl<const N: usize, const W: usize> Index<(usize, usize)> for PixelData<N,W> {
+    type Output = ColorIndex;
 
-    fn index(&self, index: usize) -> &Self::Output {
+    fn index(&self, index: (usize, usize)) -> &Self::Output {
         self.0.index(index)
     }
 }
 
-impl<const N: usize, const W: usize> IndexMut<usize> for PixelData<N,W> {
-    fn index_mut(&mut self, index: usize) -> &mut [ColorIndex] {
+impl<const N: usize, const W: usize> IndexMut<(usize, usize)> for PixelData<N,W> {
+    fn index_mut(&mut self, index: (usize, usize)) -> &mut ColorIndex {
         self.0.index_mut(index)
     }
 }
@@ -107,6 +107,7 @@ fn main() {
         input_system.after(cursor_system),
         update_pixels.after(input_system),
     ))
+    .add_plugins(EncoderPlugin)
     .run();
 }
 
@@ -119,14 +120,17 @@ fn input_system(
 ) {
     // don't handle input thats being sent to egui
     let ctx = egui.ctx_mut();
-    if ctx.is_using_pointer() || ctx.is_pointer_over_area() {return;}
+    if ctx.is_using_pointer()
+    || ctx.is_pointer_over_area()
+    || ctx.wants_pointer_input()
+    {return;}
 
     if buttons.pressed(MouseButton::Left) {
         match world_to_grid(cursor.0) {
             Some((x,y)) => {
                 match cursor_type.as_ref() {
                     CursorType::Pencil(p) => {
-                        pixels[y][x] = *p;
+                        pixels[(x,y)] = *p;
                         // eprintln!("Placing pixel at: {}/{}", x, y);
 
                     },
@@ -161,6 +165,8 @@ fn ui_controls_system(
     mut cursor_type: ResMut<CursorType>,
     mut editor_settings: ResMut<EditorSettings>,
     palette: Res<PalettesData>,
+    rle_encoded_string: Res<RLEncodedString>,
+    rle_encoded_bytes: Res<RLEncodedBytes>,
 ) {
     let ctx = contexts.ctx_mut();
 
@@ -201,22 +207,15 @@ fn ui_controls_system(
                     *button_style = FontId::new(24.0, FontFamily::Proportional);
                 }
 
-                ui.separator();
-                // pencil mode
-                if ui.button("✏").clicked() {
-                    *cursor_type = CursorType::Pencil(editor_settings.selected_color)
-                }
-                // eraser mode
-                if ui.button("🗑").clicked() {
-                    *cursor_type = CursorType::Eraser;
-                }
-                // disable input
-                if ui.button("❌").clicked() {
-                    *cursor_type = CursorType::None;
-                }
-                ui.separator();
-
                 let set = editor_settings.as_mut();
+
+                ui.separator();
+                tool_selector(
+                    ui,
+                    &mut cursor_type,
+                    &set.selected_color
+                );
+                ui.separator();
 
                 // color selector
                 color_index(
@@ -287,6 +286,20 @@ fn ui_controls_system(
         .resizable(true)
         .show(ctx, |ui| {
             ui.label("Info/Stats panel");
+            if rle_encoded_bytes.0.len() > 0 {
+                let header_bits = format!("Header Bits: {:#b}", rle_encoded_bytes.0[0]);
+                ui.label(header_bits);
+            }
+            ui.horizontal(|ui| {
+                if ui.button("📋").on_hover_text("Click to copy").clicked() {
+                    ui.output_mut(|out| {
+                        out.copied_text = rle_encoded_string.0.clone()
+                    });
+                }
+                ui.heading(&rle_encoded_string.0);
+            });
+            
+
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
         })
         .response

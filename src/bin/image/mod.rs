@@ -1,8 +1,9 @@
 use bevy::{prelude::*, render::render_resource::{TextureDimension, Extent3d, TextureFormat}};
 use image::{ImageBuffer, Pixel, RgbaImage, Rgba};
 use sixteenbit_encoding::types::ColorIndex;
-
 use crate::{EDITOR_SIZE, TOTAL_PIXELS, PixelData, PalettesData, EditorSettings};
+
+pub mod encoder;
 
 // handles drawing of the canvas when we edit it
 
@@ -64,7 +65,7 @@ pub fn update_pixels(
     if new_pixels.is_changed() {
         for (x,y,p) in buffer.0.enumerate_pixels_mut() {
             
-            let color = new_pixels[y as usize][x as usize];
+            let color = new_pixels[(x as usize, y as usize)];
 
             *p = match color {
                 ColorIndex::Empty => {

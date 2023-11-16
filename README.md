@@ -52,7 +52,7 @@ body data will be stored as [rle encoded pixels](#single-byte-rle-encoding)
 - width also gets 1 added cause 0 size is invalid
 - runs can continue on the next line
 - width is defined in the first bytes least significant 5 bits (0b000**1_1111**). maximum 32
-- the other 3 bytes will be left offset 
+- the other 3 bytes will be left offset
 - runs start from top left of image
 - discard rle byte for last row of empty pixels during encode
 - then during decode, infer last rows empty cells until image row reaches width

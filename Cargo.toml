@@ -30,6 +30,8 @@ serde = "1.0"
 bytemuck = { version = "1.14", features=["derive", "min_const_generics"] }
 # asserts that our pixel counts match our array sizes
 static_assertions = "1.1"
+# for outputting encoded RLE bytes as a hex string
+hex = "0.4"
 
 # bevy game engine and ecs. TODO: trim default features
 bevy = { version = "0.12", optional = true }
