@@ -104,7 +104,14 @@ pub fn indexed_to_rle<const PIXELS: usize, const WIDTH: usize>(image: &IndexedIm
     // then get walked to the right value in the for loop
     let mut min_x = WIDTH as u8-1;
     let mut max_x = 0;
-    for (x,_,p) in image.enumerate_pixels() {
+
+    // minimum y to start reading from.
+    // values above this are discarded and the image is treated as if it starts from that line
+    let min_y = image.vertical_trim;
+
+    for (x,y,p) in image.enumerate_pixels() {
+        // skip the vertical trimmed values
+        if y < min_y { continue; }
         // replace min with current lowest x
         match *p {
             ColorIndex::Empty => {},
@@ -126,8 +133,6 @@ pub fn indexed_to_rle<const PIXELS: usize, const WIDTH: usize>(image: &IndexedIm
         max_x = 0;
     }
 
-
-
     // now we know our offset value as min_x. Cap it at max 3 bits
     let offset = u8::min(min_x, OFFSET_LIMIT-1);
     // assert that offset value is within 3 bits (max value of 7)
@@ -140,10 +145,6 @@ pub fn indexed_to_rle<const PIXELS: usize, const WIDTH: usize>(image: &IndexedIm
     debug_assert!(encode_width < 0x1 << 5);
 
     info!("actual width: {} encoded_width: {}",encode_width + 1,encode_width);
-
-    // minimum y to start reading from.
-    // values above this are discarded and the image is treated as if it starts from that line
-    let min_y = image.vertical_trim;
 
     // run lengths acumulator
     let mut runs = vec![];
@@ -165,7 +166,7 @@ pub fn indexed_to_rle<const PIXELS: usize, const WIDTH: usize>(image: &IndexedIm
                 *p,
                 1,
             );
-            info!("First run byte: {rb:?}");
+            // info!("First run byte: {rb:?}");
             runs.push(rb);
             continue;
         }
