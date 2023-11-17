@@ -149,21 +149,6 @@ impl<const N: usize, const W: usize> IndexMut<(usize, usize)> for IndexedImage<N
     }
 }
 
-// impl<const N: usize, const W: usize> Iterator for IndexedImage<N,W> {
-//     type Item = ColorIndex;
-
-//     #[inline(always)]
-//     fn next(&mut self) -> Option<Self::Item> {
-//         self.pixels.ne
-//     }
-
-//     // #[inline(always)]
-//     // fn size_hint(&self) -> (usize, Option<usize>) {
-//     //     let len = self.len();
-//     //     (len, Some(len))
-//     // }
-// }
-
 /// for enumerating pixel contents with ease.
 /// Based on the enumerate pixels system of the image crate.
 pub struct EnumerateIndexedImage<'a, const N: usize, const W: usize> {
