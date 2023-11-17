@@ -10,6 +10,7 @@ name = "sixteenbit_encoding"
 [[bin]]
 name = "editor"
 required-features = ["gui", "dynamic_linking"]
+build = "build.rs"
 
 # Enable a small amount of optimization in debug mode
 [profile.dev]
@@ -36,6 +37,9 @@ hex = "0.4"
 # bevy game engine and ecs. TODO: trim default features
 bevy = { version = "0.12", optional = true }
 bevy_egui = {version = "0.23", optional = true }
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1.11"
 
 [features]
 default = ["args", "gui", "dynamic_linking"]
