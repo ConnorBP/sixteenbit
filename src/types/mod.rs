@@ -88,13 +88,13 @@ impl<const N: usize, const W: usize> Default for IndexedImage<N,W> {
 }
 
 impl<const N: usize,const W: usize> IndexedImage<N,W> {
-    pub fn new<const H: usize>() -> Self {
+    pub fn new() -> Self {
         // panic if the inputted pixel count is not the same as array size
         // sadly static assertions are not working here
-        debug_assert_eq!(W as usize * H as usize, N);
+        // debug_assert_eq!(W as usize * H as usize, N);
         IndexedImage {
             vertical_trim: 0,
-            resolution: [W as u8,H as u8],
+            resolution: [W as u8,(N/W) as u8],
             pixels: std::array::from_fn::<_,N,_>(|_| ColorIndex::Empty),
         }
     }

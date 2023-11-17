@@ -1,8 +1,8 @@
-use std::ops::{Index, IndexMut};
+use std::ops::{Index, IndexMut, DerefMut};
 
 use bevy::{prelude::*, window::PrimaryWindow, render::camera::{ScalingMode, Viewport}};
 use bevy_egui::{EguiPlugin, EguiContexts, egui::{self, FontId, FontFamily, Slider, TextEdit}};
-use image::{init_picture_render, update_pixels, encoder::{EncoderPlugin, RLEncodedString, RLEncodedBytes, RLEncoderSettings}};
+use image::{init_picture_render, update_pixels, encoder::{EncoderPlugin, RLEncodedString, RLEncodedBytes, RLEncoderSettings, RLEncodedStringSubmission}};
 use sixteenbit_encoding::types::{ColorIndex, PaletteCollection, IndexedImage};
 use utils::world_to_grid;
 use widgets::{color_index, tool_selector};
@@ -149,7 +149,7 @@ fn main() {
     })
     .insert_resource(CursorType::Pencil(ColorIndex::Dark))
     .insert_resource(PixelData {
-        pixels: IndexedImage::<TOTAL_PIXELS,EDITOR_SIZE>::new::<EDITOR_SIZE>(),
+        pixels: IndexedImage::<TOTAL_PIXELS,EDITOR_SIZE>::new(),
         ..default()
     })
     .add_systems(Startup, 
@@ -259,8 +259,10 @@ fn ui_controls_system(
     mut editor_settings: ResMut<EditorSettings>,
     mut rle_encoder_settings: ResMut<RLEncoderSettings>,
     rle_encoded_string: Res<RLEncodedString>,
+    mut rle_encoded_string_submit: ResMut<RLEncodedStringSubmission>,
     rle_encoded_bytes: Res<RLEncodedBytes>,
     palette: Res<PalettesData>,
+    mut input_rle_string: Local<String>,
 ) {
     let ctx = contexts.ctx_mut();
 
@@ -379,14 +381,47 @@ fn ui_controls_system(
     occupied_screen_space.bottom = egui::TopBottomPanel::bottom("bottom_panel")
         .resizable(true)
         .show(ctx, |ui| {
-            ui.heading("RLE Encoder");
-            let vt = ui.label("Vertical Trim").id;
-            if ui.add(Slider::new(
-                &mut rle_encoder_settings.bypass_change_detection().vertical_trim,
-                0..=(EDITOR_SIZE as u8 -1)
-            )).labelled_by(vt).changed() {
-                rle_encoder_settings.set_changed();
+            {
+                
+                egui::Grid::new("parent grid").min_col_width(200.).striped(true).show(ui, |ui| {
+                    // First Col
+                    ui.vertical(|ui| {
+                        ui.heading("RLE Encoder");
+                        let vt = ui.label("Vertical Trim").id;
+                        if ui.add(Slider::new(
+                            &mut rle_encoder_settings.bypass_change_detection().vertical_trim,
+                            0..=(EDITOR_SIZE as u8 -1)
+                        )).labelled_by(vt).changed() {
+                            rle_encoder_settings.set_changed();
+                        }
+                        if rle_encoded_bytes.0.bytes.len() > 0 {
+                            let header_bits = format!(
+                                "Header bits: {:#b} encoded_width: {} left_offset: {}",
+                                rle_encoded_bytes.0.bytes[0],
+                                rle_encoded_bytes.0.header_width,
+                                rle_encoded_bytes.0.header_offset
+                            );
+                            ui.label(header_bits);
+                        }
+                    });
+                    // Second Col
+
+                    
+                    ui.vertical(|ui| {
+                        ui.heading("RLE Decoder");
+                        TextEdit::singleline(input_rle_string.deref_mut()).hint_text("Enter RLE Hex String").show(ui);
+                    });
+
+                    if ui.button("Apply").clicked() {
+                        // submit string to be decoded
+                        rle_encoded_string_submit.0 = Some(input_rle_string.clone());
+                    }
+
+                    // move to next row
+                    ui.end_row();
+                });
             }
+
             ui.horizontal(|ui| {
                 ui.label(format!("Hex Encoded ({} Bytes): ", rle_encoded_bytes.0.bytes.len()));
                 if ui.button("📋").on_hover_text("Click to copy").clicked() {
@@ -396,16 +431,6 @@ fn ui_controls_system(
                 }
                 ui.add(TextEdit::singleline(&mut rle_encoded_string.0.as_str()).desired_width(f32::INFINITY))
             });
-
-            if rle_encoded_bytes.0.bytes.len() > 0 {
-                let header_bits = format!(
-                    "Header bits: {:#b} encoded_width: {} left_offset: {}",
-                    rle_encoded_bytes.0.bytes[0],
-                    rle_encoded_bytes.0.header_width,
-                    rle_encoded_bytes.0.header_offset
-                );
-                ui.label(header_bits);
-            }
             
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
         })

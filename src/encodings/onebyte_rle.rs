@@ -1,10 +1,12 @@
-use bevy::log::info;
-
+use bevy::log::{info, warn};
 use crate::types::{ColorIndex, IndexedImage};
+use bytemuck::Contiguous;
 
 // run length must be within 5 bits, so less than 0x20
 const RUN_LENGTH_LIMIT: u8 = 0x1 << 5;
 const OFFSET_LIMIT: u8 = 0x1 << 3;
+const WIDTH_MASK: u8 = (0x1 << 5)-1;
+const RUN_LENGTH_MASK: u8 = (0x1 << 5)-1;
 
 
 /// Structure representing an image encoded with my Domain Specific 1Byte-per-run Color RLE encoding
@@ -29,6 +31,46 @@ impl OneByteRle {
         }
     }
 
+    /// Consumes a vec of bytes to create the encoder decoder object
+    /// returns None if bytes are empty
+    pub fn new_with_bytes(bytes: Vec<u8>) -> Option<Self> {
+        if bytes.len() == 0 {
+            return None;
+        }
+
+        let header_byte = bytes[0];
+
+        let (header_offset, header_width) = Self::get_header_from_byte(header_byte);
+
+        Some(Self {
+            header_offset,
+            header_width,
+            bytes,
+        })
+    }
+
+    pub fn get_header_from_byte(header_byte: u8) -> (u8,u8) {
+        // get header from Most Significant 5 bits
+        let header_offset = header_byte.clone() >> 5;
+        // get width from Least Significant 3 bits
+        let header_width = header_byte & WIDTH_MASK;
+
+        info!("Got header {header_byte} off: {header_offset} width: {header_width} w mask: {WIDTH_MASK}");
+
+        (header_offset,header_width)
+    }
+
+    pub fn get_header(&self) -> Option<(u8,u8)> {
+        if self.bytes.len() == 0 {
+            return None;
+        }
+        let header_byte = self.bytes[0];
+
+        info!("GETTING HEADER BYTE {header_byte:#0b}");
+
+        Some(Self::get_header_from_byte(header_byte))
+    }
+
     /// return ownership of inner bytes and consume self
     pub fn bytes(self) -> Vec<u8> {
         self.bytes
@@ -43,7 +85,7 @@ impl OneByteRle {
         self.header_offset = offset;
         self.header_width = encode_width;
         // create header byte
-        let header_byte: u8 = (offset as u8) << 5 | (encode_width & 0x1F);
+        let header_byte: u8 = (offset as u8) << 5 | (encode_width & WIDTH_MASK);
         // push the header to the first byte of our array
         self.bytes.push(header_byte);
     }
@@ -71,6 +113,13 @@ impl<const N: usize, const W: usize> From<&IndexedImage<N,W>> for OneByteRle {
     }
 }
 
+/// Creates an indexed image buffer from self RLE Bytes
+impl<const N: usize, const W: usize> Into<IndexedImage<N,W>> for OneByteRle {
+    fn into(self) -> IndexedImage<N,W> {
+        rle_to_indexed::<N,W>(&self, 0)
+    }
+}
+
 #[derive(Debug,Clone)]
 pub struct RunByte {
     color: ColorIndex,// first 3 bits from MSB
@@ -91,6 +140,89 @@ impl RunByte {
         // and RLE as last 5 mased with the lower 5 bits
         (self.color as u8) << 5 | (self.run_length-1 & 0x1F)
     }
+
+    pub fn from_byte(byte: u8) -> Option<Self> {
+        if let Some(color) = ColorIndex::from_integer(byte.clone() >> 5) {
+            Some(Self {
+                color,
+                run_length: (byte.clone() & RUN_LENGTH_MASK) + 1,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+/// Receives an array of RLE encoded bytes and outputs them into the IndexedImage format.
+/// Steps:
+/// From y = trim and x = offset, output pixels from left to right
+/// wrapping to the next line after outputing the pixel when x = offset + width
+pub fn rle_to_indexed<const PIXELS: usize, const WIDTH: usize>(rle: &OneByteRle, trim: u8) -> IndexedImage<PIXELS, WIDTH> {
+    let mut out = IndexedImage::new();
+    rle_on_indexed(&mut out, rle, trim, true);
+    out
+}
+
+/// takes in RLE Bytes and a reference to an indexed image,
+/// then writes on top of that image with the decoded RLE Pixels
+pub fn rle_on_indexed<'a, const PIXELS: usize, const WIDTH: usize>(image_out: &'a mut IndexedImage<PIXELS, WIDTH>, rle: &'a OneByteRle, trim: u8, overwrite: bool) {
+    match rle.get_header() {
+        Some((header_offset, header_width)) => {
+
+            info!("decoding with header offset {header_offset} width {header_width}");
+
+            let mut encoded_bytes_iter = rle.bytes.iter();
+            // skip header
+            encoded_bytes_iter.next();
+
+            let mut x = header_offset as usize;
+            let mut y = trim as usize;
+
+            let mut pixel_out_count: usize = 0;
+
+            for b in encoded_bytes_iter.map(|b| RunByte::from_byte(*b)) {
+                // stop decoding if we hit an invalid byte
+                let b = if let Some(inner_b) = b {
+                    inner_b
+                } else {
+                    warn!("ENCOUNTERED INVALID BYTE WHILE DECODING RLE");
+                    break;
+                };
+
+                info!("performing run of {}px color {:?}", b.run_length,b.color);
+
+                for _ in 0..b.run_length {
+                    // check for safety that the pixel is in range of our array
+                    let index = 
+                        WIDTH
+                        * y as usize
+                        + x as usize;
+                    // stop decoding if we hit the end of our pixel array
+                    if index >= PIXELS-1 {
+                        break;
+                    }
+                    // output color to pixel coordinate
+                    if overwrite || b.color != ColorIndex::Empty {
+                        image_out[(x,y)] = b.color;
+                    }
+                    // now advance our x and y for the next pixel
+                    pixel_out_count+=1;
+
+                    let real_width = header_width as usize + 1;
+
+                    x = header_offset as usize + (pixel_out_count % real_width);
+                    // advance y when we reach width
+                    if pixel_out_count % real_width == 0 {
+                        y+=1;
+                    }
+                }
+            }
+        },
+        _=> {
+            // invalid header, or empty bytes. Return an empty image
+            warn!("ENCOUNTERED INVALID RLE HEADER");
+        }
+    }
 }
 
 /// take in an array of indexed colors that make up an image
@@ -98,7 +230,8 @@ impl RunByte {
 /// calculate left offset = x of most left pixel
 /// calculate width = (x of most right pixel + 1) - offset
 /// (except we don't add the 1 so we can treat 0 as 1 on decode)
-/// 
+/// Then for each byte count repeats, wrapping at width
+/// finally, prune trailing Empty/null pixels
 pub fn indexed_to_rle<const PIXELS: usize, const WIDTH: usize>(image: &IndexedImage<PIXELS, WIDTH>) -> OneByteRle {
     // these start as oposite from eachother,
     // then get walked to the right value in the for loop

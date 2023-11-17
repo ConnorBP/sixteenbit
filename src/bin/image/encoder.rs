@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use crate::{TOTAL_PIXELS, EDITOR_SIZE, PixelData};
-use sixteenbit_encoding::encodings::OneByteRle;
+use sixteenbit_encoding::encodings::{OneByteRle, rle_on_indexed};
 
 pub struct EncoderPlugin;
 
@@ -11,7 +11,13 @@ impl Plugin for EncoderPlugin {
         .init_resource::<RLEncodedBytes>()
         .init_resource::<RLEncodedString>()
         .init_resource::<RLEncoderSettings>()
-        .add_systems(Update, update_encoding);
+        .init_resource::<RLEncodedStringSubmission>()
+        .add_systems(Update,
+            (
+            update_encoding,
+            update_rle_input,
+            )
+        );
     }
 }
 
@@ -27,6 +33,11 @@ pub struct RLEncoderSettings {
 /// stored as a raw byte vec
 #[derive(Resource, Default)]
 pub struct RLEncodedBytes(pub OneByteRle);
+
+/// When this is set, we decode the RLE bytes from the string
+/// and then we apply them to the current canvas.
+#[derive(Resource, Default)]
+pub struct RLEncodedStringSubmission(pub Option<String>);
 
 /// The most recently generated encoding of the canvas,
 /// displayed as a hex string.
@@ -50,5 +61,36 @@ pub fn update_encoding(
 
         encoded_bytes.0 = encoder;
         encoded_string.0 = hex::encode(&encoded_bytes.0.bytes);
+    }
+}
+
+/// Writes pixels from RLE strings onto the canvas when RLEncodedStringSubmission is Some
+pub fn update_rle_input(
+    rle_encoder_settings: Res<RLEncoderSettings>,
+    new_rle: Res<RLEncodedStringSubmission>,
+    mut canvas_indexed_pixels: ResMut<PixelData<TOTAL_PIXELS,EDITOR_SIZE>>,
+) {
+    if new_rle.is_changed() {
+        if let Some(hex_str) = &new_rle.0 {
+            match hex::decode(hex_str.trim_matches(' '))
+            .map(OneByteRle::new_with_bytes) {
+                Ok(Some(decoder)) => {
+                    // apply the RLE bytes to our indexed canvas
+                    rle_on_indexed(
+                        &mut canvas_indexed_pixels.pixels,
+                        &decoder,
+                        rle_encoder_settings.vertical_trim,
+                        false // overlap input onto canvas
+                    );
+                },
+                Err(e) => {
+                    error!("RLE Decode Error: {e}");
+                }
+                _=> {
+                    // decode failed
+                    warn!("RLE Decode Failed.");
+                }
+            }
+        }
     }
 }
