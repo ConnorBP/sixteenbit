@@ -9,6 +9,16 @@ pub mod encoder;
 ///  our real pixels will have on the screen rendered version
 const EXTRA_DISPLAY_PIXELS_MUL: usize = 6;
 
+/// mask applied to visualize pixels that will be removed from encoding
+const CROSS_GRAPHIC: [[bool;6];6] = [
+    [true,false,false,false,false,true],
+    [false,true,false,false,true,false],
+    [false,false,true,true,false,false],
+    [false,false,true,true,false,false],
+    [false,true,false,false,true,false],
+    [true,false,false,false,false,true],
+];
+
 // handles drawing of the canvas when we edit it
 
 #[derive(Resource)]
@@ -69,6 +79,8 @@ pub fn update_pixels(
     mut buffer: ResMut<CanvasImage>,
     mut images: ResMut<Assets<Image>>,
 ) {
+    let v_trim = new_pixels.pixels.vertical_trim;
+
     if new_pixels.is_changed() {
         for (x,y,p) in buffer.0.enumerate_pixels_mut() {
 
@@ -87,9 +99,9 @@ pub fn update_pixels(
                 }
             };
             
-            let sample_x = (((x as f32) - offset_x) / scale);
-            let sample_y = (((y as f32) - offset_y) / scale);
-            
+            let sample_x = ((x as f32) - offset_x) / scale;
+            let sample_y = ((y as f32) - offset_y) / scale;
+
             let color = if
             sample_x >= EDITOR_SIZE as f32
             || sample_x < 0.
@@ -102,15 +114,34 @@ pub fn update_pixels(
                 new_pixels[(sample_x as usize, sample_y as usize)]
             };
 
-            *p = match color {
+            // draw X over trimmed pixels
+            let trimmed: Rgba<u8> =                     
+            if (((y as f32) / scale) as u32) < (v_trim as u32) {
+                if CROSS_GRAPHIC[y as usize % 6][x as usize % 6] {
+                    [255,0,0,180].into()
+                } else {
+                    [50,50,100,100].into()
+                }
+            } else {
+                Rgba([0,0,0,0])
+            };
+
+            // get RGB Value for pixel color or empty from palette
+            let mut pixel = match color {
                 ColorIndex::Empty => {
                     Rgba([0,0,0,0])
                 },
                 color => {
                     palette.0[settings.selected_palette]
-                        [color].to_rgba()
+                    [color].to_rgba()
                 },
             };
+
+            // blend our trim indicator with the original pixel color
+            pixel.blend(&trimmed);
+
+            // apply the pixel to the output texture
+            *p = pixel;
         }
         // push changes to bevy texture
         if let Some(img) = images.get_mut(&buffer.1) {
