@@ -1,7 +1,5 @@
-use std::{ops::{Index, IndexMut}, fmt::Display, os::windows, slice::IterMut};
-use bevy::{utils::info, log::info, asset::AsyncReadExt, reflect::TypeData};
+use std::{ops::{Index, IndexMut}, fmt::Display};
 use bytemuck::{Zeroable, Pod, Contiguous};
-use static_assertions::{const_assert_eq, const_assert};
 
 
 /// A super small 3bit color index
@@ -93,7 +91,7 @@ impl<const N: usize,const W: usize> IndexedImage<N,W> {
     pub fn new<const H: usize>() -> Self {
         // panic if the inputted pixel count is not the same as array size
         // sadly static assertions are not working here
-        assert_eq!(W as usize * H as usize, N);
+        debug_assert_eq!(W as usize * H as usize, N);
         IndexedImage {
             vertical_trim: 0,
             resolution: [W as u8,H as u8],
