@@ -7,6 +7,12 @@ Stores pixel art assets in super small domain-specific implementation of rle and
 
 see the [editor readme](./EDITOR.md)
 
+TODO:
+- add mode that displays RLE size values on canvas pixels
+- add fill bucket
+- add import and export, open and save
+
+
 ### DNA 2Byte format
     (colorid) (features: (eyes)(alphamask)(colormask))(base_shapes: head, body)
     (3bits  ) (5bits:    (1bit)(2bit     )(2bit     ))(8bits:      (4bit)(4bit))
