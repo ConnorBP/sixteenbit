@@ -3,8 +3,6 @@ use sixteenbit_encoding::types::{ColorIndex, Palette};
 
 use crate::CursorType;
 
-
-
 pub fn color_index(
     ui: &mut Ui,
     selected_color: &mut ColorIndex,
@@ -33,9 +31,9 @@ pub fn selector_button(
 ) {
 
     let color = if alt == *selected_tool {
-        Color32::from_rgb(75, 75, 100)
+        Color32::from_rgb(75, 75, 180)
     } else {
-        Color32::from_rgb(75, 75, 75)
+        Color32::from_rgb(225, 225, 225)
     };
 
     if ui.button(
