@@ -15,9 +15,9 @@ pub fn grid_to_world(grid_pos: (u32,u32)) -> Vec2 {
 
 pub fn world_to_grid(world_pos: Vec2) -> Option<(usize,usize)> {
     
-    let x = ((world_pos.x) + EDITOR_SIZE as f32 / 2.);
+    let x = (world_pos.x) + EDITOR_SIZE as f32 / 2.;
     // y is flipped for some reason
-    let y = ((-world_pos.y) + EDITOR_SIZE as f32 / 2.);
+    let y = (-world_pos.y) + EDITOR_SIZE as f32 / 2.;
 
     // return in bounds result or None
     if x < 0. || x >= EDITOR_SIZE as f32

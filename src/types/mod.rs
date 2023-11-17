@@ -1,5 +1,5 @@
-use std::{ops::{Index, IndexMut}, fmt::Display, os::windows};
-use bevy::{utils::info, log::info};
+use std::{ops::{Index, IndexMut}, fmt::Display, os::windows, slice::IterMut};
+use bevy::{utils::info, log::info, asset::AsyncReadExt, reflect::TypeData};
 use bytemuck::{Zeroable, Pod, Contiguous};
 use static_assertions::{const_assert_eq, const_assert};
 
@@ -53,6 +53,32 @@ pub struct IndexedImage<const N: usize, const W: usize> {
     pixels: [ColorIndex;N],
 }
 
+impl<const N: usize, const W: usize> IndexedImage<N,W> {
+    /// shifts all pixels by (x, y) and drops any out of bounds
+    pub fn shift(&mut self, x_offset: i32, y_offset: i32) {
+        let res = self.resolution;
+
+        let sampler = self.clone();
+
+        for (new_x, new_y,p) in self.enumerate_pixels_mut() {
+
+            let sample_x = (new_x as i32) - x_offset;
+            let sample_y = (new_y as i32) - y_offset;
+
+            *p = if
+            sample_x >= res[0] as i32
+            || sample_x < 0
+            || sample_y >= res[1] as i32
+            || sample_y < 0
+            {
+                ColorIndex::Empty
+            } else {
+                sampler[(sample_x as usize, sample_y as usize)]
+            };
+        }
+    }
+}
+
 impl<const N: usize, const W: usize> Default for IndexedImage<N,W> {
     fn default() -> Self {
         Self {
@@ -76,6 +102,14 @@ impl<const N: usize,const W: usize> IndexedImage<N,W> {
     }
     pub fn enumerate_pixels(&self) -> EnumerateIndexedImage<N,W> {
         EnumerateIndexedImage {
+            image: self,
+            x: 0,
+            y: 0,
+        }
+    }
+
+    pub fn enumerate_pixels_mut(&mut self) -> EnumerateIndexedImageMut<N,W> {
+        EnumerateIndexedImageMut {
             image: self,
             x: 0,
             y: 0,
@@ -112,7 +146,6 @@ impl<const N: usize, const W: usize> IndexMut<(usize, usize)> for IndexedImage<N
             + index.0 as usize; // x
 
         &mut self.pixels[index]
-
     }
 }
 
@@ -137,7 +170,6 @@ pub struct EnumerateIndexedImage<'a, const N: usize, const W: usize> {
     image: &'a IndexedImage<N,W>,
     x: u8,
     y: u8,
-    // width: u8,
 }
 
 impl<'a, const N: usize, const W: usize> Iterator for EnumerateIndexedImage<'a,N,W> {
@@ -167,11 +199,70 @@ impl<'a, const N: usize, const W: usize> Iterator for EnumerateIndexedImage<'a,N
         Some((x,y,&self.image[(x as usize, y as usize)]))
     }
 
-    // #[inline(always)]
-    // fn size_hint(&self) -> (usize, Option<usize>) {
-    //     let len = self.len();
-    //     (len, Some(len))
-    // }
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.image.resolution[0] as usize * self.image.resolution[1] as usize;
+        (len, Some(len))
+    }
+}
+
+pub struct EnumerateIndexedImageMut<'a, const N: usize, const W: usize>
+{
+    image: &'a mut IndexedImage<N,W>,
+    x: u8,
+    y: u8,
+}
+
+impl<'a, const N: usize, const W: usize> Iterator for EnumerateIndexedImageMut<'a,N,W> {
+    type Item = (u8,u8, &'a mut ColorIndex) where Self::Item: 'a;
+
+    #[inline(always)]
+    fn next(& mut self) -> Option<Self::Item>
+    {
+
+        if self.x >= self.image.resolution[0] {
+            self.x = 0;
+            self.y += 1;
+        }
+        let (x, y) = (self.x, self.y);
+        self.x += 1;
+        
+        // calculate flat index into the array
+        let index = 
+            self.image.resolution[0] as usize // width
+            * y as usize
+            + x as usize;
+
+        // stop when we run out of pixels
+        if index >= N {
+            return None;
+        }
+
+        let ptr = self.image.pixels.as_mut_ptr();
+        
+        // info!("enumerating pixel {x} {y}");
+        // std::mem::take(&mut self.image[(x as usize, y as usize)])
+
+        // calculate flat index into the array
+        let index = 
+            self.image.resolution[0] as usize // width
+            * y as usize // y
+            + x as usize; // x
+
+        unsafe {
+            Some((
+                x,
+                y,
+                &mut *ptr.add(index)
+            ))
+        }
+    }
+
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.image.resolution[0] as usize * self.image.resolution[1] as usize;
+        (len, Some(len))
+    }
 }
 
 // collection of pallets (max 8)

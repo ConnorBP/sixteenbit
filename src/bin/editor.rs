@@ -40,8 +40,64 @@ pub enum CursorType {
     Eraser,
 }
 
+#[derive(Default)]
+struct MoveOp {
+    pub move_start: Vec2,
+    pub move_end: Vec2,
+}
+
 #[derive(Resource, Default)]
-pub struct PixelData<const N: usize, const W: usize>(IndexedImage<N,W>);
+pub struct PixelData<const N: usize, const W: usize> {
+    /// Keeps track of image move in progress
+    move_op: Option<MoveOp>,
+    pub pixels: IndexedImage<N,W>,
+}
+
+impl<const N: usize, const W: usize> PixelData<N,W> {
+    /// starts a move operation
+    pub fn start_move(&mut self, cursor_start_pos: Vec2) {
+        self.move_op = Some(MoveOp {
+            move_start: cursor_start_pos,
+            move_end: cursor_start_pos
+        });
+    }
+
+    pub fn update_move(&mut self, cursor_pos: Vec2) {
+        match &mut self.move_op {
+            Some(op) => {
+                op.move_end = cursor_pos;
+            },
+            _ => {
+                warn!("update_move called outside of valid move operation");
+            },
+        }
+    }
+
+    /// Cancels a move operation without applying it
+    pub fn cancel_move(&mut self) {
+        self.move_op = None;
+    }
+
+    /// ends and commits the move operation
+    pub fn end_move(&mut self, cursor_pos: Vec2) {
+        // apply the final transformation based on the final delta
+        match &self.move_op {
+            Some(mv_op) => {
+                let mut delta = cursor_pos - mv_op.move_start;
+                delta.y = -delta.y;
+                let (offset_x,offset_y) = {
+                    let rounded = delta.round();
+                    (rounded.x as i32, rounded.y as i32)
+                };
+                self.pixels.shift(offset_x,offset_y);
+            },
+            _=> {},
+        }
+        // finally clear the move op so the renderer stops outputting offset pixels
+        self.move_op = None;
+    }
+
+}
 
 #[derive(Resource, Default)]
 pub struct PalettesData(PaletteCollection<u8>);
@@ -56,13 +112,13 @@ impl<const N: usize, const W: usize> Index<(usize, usize)> for PixelData<N,W> {
     type Output = ColorIndex;
 
     fn index(&self, index: (usize, usize)) -> &Self::Output {
-        self.0.index(index)
+        self.pixels.index(index)
     }
 }
 
 impl<const N: usize, const W: usize> IndexMut<(usize, usize)> for PixelData<N,W> {
     fn index_mut(&mut self, index: (usize, usize)) -> &mut ColorIndex {
-        self.0.index_mut(index)
+        self.pixels.index_mut(index)
     }
 }
 
@@ -92,7 +148,10 @@ fn main() {
         selected_palette: 0,
     })
     .insert_resource(CursorType::Pencil(ColorIndex::Dark))
-    .insert_resource(PixelData(IndexedImage::<TOTAL_PIXELS,EDITOR_SIZE>::new::<EDITOR_SIZE>()))
+    .insert_resource(PixelData {
+        pixels: IndexedImage::<TOTAL_PIXELS,EDITOR_SIZE>::new::<EDITOR_SIZE>(),
+        ..default()
+    })
     .add_systems(Startup, 
         (
             init_picture_render,
@@ -126,18 +185,48 @@ fn input_system(
     || ctx.wants_pointer_input()
     {return;}
 
+    
+    match cursor_type.as_ref() {
+        CursorType::Move => {
+            // start move operation
+            // and store starting position
+            if buttons.just_pressed(MouseButton::Left) {
+                pixels.start_move(cursor.0);
+            } else if buttons.pressed(MouseButton::Left) {
+                // update current pos on the move event
+                pixels.update_move(cursor.0);
+            }
+
+            // end move operation
+            if buttons.just_released(MouseButton::Left) {
+                pixels.end_move(cursor.0)
+            }
+
+            // cancel move op with right click
+            if buttons.just_pressed(MouseButton::Right) {
+                pixels.cancel_move();
+            }
+
+        },
+        _ => {},
+    }
+
     if buttons.pressed(MouseButton::Left) {
         match world_to_grid(cursor.0) {
             Some((x,y)) => {
                 match cursor_type.as_ref() {
                     CursorType::Pencil(p) => {
                         pixels[(x,y)] = *p;
-                        // eprintln!("Placing pixel at: {}/{}", x, y);
+                        eprintln!("Placing pixel at: {}/{}", x, y);
 
                     },
                     CursorType::Eraser => {
-                        
-                    }
+                        pixels[(x,y)] = ColorIndex::Empty;
+                    },
+                    CursorType::FillBucket(p) => {
+                        // TODO impl fill algo
+                        pixels[(x,y)] = *p;
+                    },
                     _ => {},
                 }
             },
@@ -153,6 +242,9 @@ fn update_pen_color(
     if editor_settings.is_changed() {
         match cursor_type.as_mut() {
             CursorType::Pencil(c) => {
+                *c = editor_settings.selected_color;
+            },
+            CursorType::FillBucket(c) => {
                 *c = editor_settings.selected_color;
             },
             _=>{},

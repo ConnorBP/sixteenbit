@@ -44,9 +44,9 @@ pub fn update_encoding(
     || rle_encoder_settings.is_changed()
     {
         // apply the trim value
-        new_pixels.0.vertical_trim = rle_encoder_settings.vertical_trim;
+        new_pixels.pixels.vertical_trim = rle_encoder_settings.vertical_trim;
         // encode new pixels
-        let encoder: OneByteRle = (&new_pixels.0).into();
+        let encoder: OneByteRle = (&new_pixels.pixels).into();
 
         encoded_bytes.0 = encoder;
         encoded_string.0 = hex::encode(&encoded_bytes.0.bytes);
