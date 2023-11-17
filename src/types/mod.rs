@@ -249,6 +249,8 @@ impl<'a, const N: usize, const W: usize> Iterator for EnumerateIndexedImageMut<'
             * y as usize // y
             + x as usize; // x
 
+        // unsafe because of this:
+        // https://stackoverflow.com/questions/63437935/in-rust-how-do-i-create-a-mutable-iterator
         unsafe {
             Some((
                 x,
