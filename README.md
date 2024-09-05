@@ -1,6 +1,14 @@
 # RLE and 1bit encoding based image generation
 Stores pixel art assets in super small domain-specific implementation of rle and 1bit encoding. These assets are then combined by some rules (or DNA) to generate some final image from any psudo-random value. Useful for unique avatar generation, or NFT avatars.
 
+![screenshot of early version editor](/screenshot.png)
+
+this character can be loaded with the following encoded string: `481220042001216221016041604160016040c060c040600166016122610280628001608660018403a403a002a003a002a002210221`
+
+## Running
+
+Type the following in your terminal in the project directory to build and run a release build: ```cargo run --bin editor --release```
+
 ## Components
 
 ### Image Editor
